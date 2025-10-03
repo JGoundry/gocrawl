@@ -1,0 +1,171 @@
+package crawler
+
+import (
+	"fmt"
+	"net/http"
+	"strings"
+	"sync"
+	"webcrawler/debug"
+
+	"golang.org/x/net/html"
+)
+
+type Crawler struct {
+	BaseUrl     string
+	WorkerCount int // concurrent workers to create
+
+	mu          sync.Mutex
+	visited     map[string]struct{}
+	urlQueue    chan string
+	urlOverflow []string
+	workTracker sync.WaitGroup
+}
+
+func (c *Crawler) crawlWorker() {
+	for {
+		select {
+		case url, ok := <-c.urlQueue:
+			if !ok {
+				debug.Println("Worker exiting: URL queue closed")
+				return
+			}
+			debug.Println("Crawling url from chan", url)
+			c.crawl(url)
+
+		default:
+			c.mu.Lock()
+			if len(c.urlOverflow) == 0 {
+				c.mu.Unlock()
+			} else {
+				url := c.urlOverflow[0]
+				c.urlOverflow = c.urlOverflow[1:]
+				c.mu.Unlock()
+				debug.Println("Crawling url from overflow", url)
+				c.crawl(url)
+			}
+		}
+	}
+}
+
+func getHtml(url string) (*html.Node, error) {
+	resp, err := http.Get(url) // send GET
+	if err != nil {
+		return nil, err
+	}
+
+	// Check status is ok
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("Non-OK HTTP Status: %v", resp.Status)
+	}
+
+	// Ensure content is html
+	if !strings.Contains(resp.Header.Get("Content-Type"), "text/html") {
+		return nil, fmt.Errorf("Content-Type is not html")
+	}
+
+	node, err := html.Parse(resp.Body) // parse HTML
+	resp.Body.Close()                  // close http reader
+	if err != nil {
+		return nil, err
+	}
+	return node, nil
+}
+
+func findUrls(attr []html.Attribute, baseUrl string) []string {
+	var urls []string
+	for _, a := range attr {
+		if a.Key == "href" {
+			if len(a.Val) == 0 || a.Val[0] != '/' { // skip other websites for now
+				continue
+			}
+
+			urls = append(urls, fmt.Sprintf("%s%s", baseUrl, a.Val))
+		}
+	}
+	return urls
+}
+
+func (c *Crawler) crawl(url string) {
+	defer c.workTracker.Done()
+
+	c.mu.Lock()
+	if _, visited := c.visited[url]; visited {
+		c.mu.Unlock()
+		return // already visited
+	}
+	c.visited[url] = struct{}{}
+	c.mu.Unlock()
+
+	node, err := getHtml(url)
+	if err != nil {
+		debug.Println(err)
+		return
+	}
+
+	// A recursive function (or a simple visitor pattern) to walk the HTML nodes
+	var findLinks func(*html.Node)
+	findLinks = func(n *html.Node) {
+		if n.Type == html.ElementNode && n.Data == "a" {
+			urls := findUrls(n.Attr, c.BaseUrl)
+			// search an.Attr child nodes? already in children?
+
+			c.workTracker.Add(len(urls)) // CRITICAL: increment work tracker first
+
+			for _, url := range urls {
+				select {
+				case c.urlQueue <- url:
+				default:
+					debug.Println("Warning: URL queue is full, adding to overflow")
+					c.mu.Lock()
+					c.urlOverflow = append(c.urlOverflow, url)
+					c.mu.Unlock()
+				}
+			}
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			findLinks(c)
+		}
+	}
+
+	findLinks(node)
+}
+
+func (c *Crawler) Start() {
+	var wg sync.WaitGroup
+
+	c.visited = make(map[string]struct{})
+	c.urlQueue = make(chan string, 1000)
+	c.urlOverflow = make([]string, 0, 1000)
+
+	// Increment work tracker and send base url to chan
+	c.workTracker.Add(1)
+	c.urlQueue <- c.BaseUrl
+
+	workerCount := max(c.WorkerCount, 1)
+	wg.Add(workerCount)
+	for range workerCount {
+		go func() {
+			defer wg.Done()
+			c.crawlWorker()
+		}()
+	}
+
+	// Wait until all work is done
+	c.workTracker.Wait()
+
+	// Send done signal to workers
+	close(c.urlQueue)
+
+	// Wait for workers to complete
+	wg.Wait()
+}
+
+func (c *Crawler) PrintUrls() {
+	for key := range c.visited {
+		fmt.Println(key)
+	}
+}
+
+func (c *Crawler) TotalVisited() int {
+	return len(c.visited)
+}
