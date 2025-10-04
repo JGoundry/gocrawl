@@ -3,6 +3,7 @@ package crawler
 import (
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 	"webcrawler/debug"
@@ -12,13 +13,13 @@ import (
 
 type Crawler struct {
 	BaseUrl     string
-	WorkerCount int // concurrent workers to create
+	WorkerCount int
 
-	mu          sync.Mutex
-	visited     map[string]struct{}
-	urlQueue    chan string
-	urlOverflow []string
-	workTracker sync.WaitGroup
+	mu          sync.Mutex          // Mutex for visited set, url overflow queue
+	visited     map[string]struct{} // Visited URL set
+	urlQueue    chan string         //
+	urlOverflow []string            // URL queue to prevent blocking when chan full
+	workTracker sync.WaitGroup      // Blocks on main thread until all work is done
 }
 
 func (c *Crawler) crawlWorker() {
@@ -106,10 +107,17 @@ func (c *Crawler) crawl(url string) {
 	var findLinks func(*html.Node)
 	findLinks = func(n *html.Node) {
 		if n.Type == html.ElementNode && n.Data == "a" {
-			urls := findUrls(n.Attr, c.BaseUrl)
 			// search an.Attr child nodes? already in children?
 
-			c.workTracker.Add(len(urls)) // CRITICAL: increment work tracker first
+			// Get and filter urls from visited
+			c.mu.Lock()
+			urls := slices.DeleteFunc(findUrls(n.Attr, c.BaseUrl), func(s string) bool {
+				_, visited := c.visited[url]
+				return !visited
+			})
+			c.mu.Unlock()
+
+			c.workTracker.Add(len(urls)) // CRITICAL: increment work tracker first otherwise data race
 
 			for _, url := range urls {
 				select {
