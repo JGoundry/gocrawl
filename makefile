@@ -12,4 +12,4 @@ build: vet
 	go build
 
 clean:
-	rm webcrawler
+	rm gocrawl

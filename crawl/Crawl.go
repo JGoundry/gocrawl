@@ -1,19 +1,33 @@
-package crawler
+package crawl
 
 import (
 	"fmt"
+	"gocrawl/debug"
 	"net/http"
-	"slices"
 	"strings"
 	"sync"
-	"webcrawler/debug"
 
 	"golang.org/x/net/html"
 )
 
-type Crawler struct {
+// Word -> URLs -> Occurence count
+type InvertedIndex = map[string]map[string]uint
+
+func Crawl(baseUrl string, workerCount uint) (InvertedIndex, []string) {
+	c := crawler{
+		BaseUrl:     "https://quotes.toscrape.com",
+		WorkerCount: workerCount,
+	}
+	c.run()
+
+	// todo: index
+	return InvertedIndex{}, c.urlsVisited()
+
+}
+
+type crawler struct {
 	BaseUrl     string
-	WorkerCount int
+	WorkerCount uint
 
 	mu          sync.Mutex          // Mutex for visited set, url overflow queue
 	visited     map[string]struct{} // Visited URL set
@@ -22,7 +36,7 @@ type Crawler struct {
 	workTracker sync.WaitGroup      // Blocks on main thread until all work is done
 }
 
-func (c *Crawler) crawlWorker() {
+func (c *crawler) crawlWorker() {
 	for {
 		select {
 		case url, ok := <-c.urlQueue:
@@ -86,7 +100,7 @@ func findUrls(attr []html.Attribute, baseUrl string) []string {
 	return urls
 }
 
-func (c *Crawler) crawl(url string) {
+func (c *crawler) crawl(url string) {
 	defer c.workTracker.Done()
 
 	c.mu.Lock()
@@ -108,14 +122,7 @@ func (c *Crawler) crawl(url string) {
 	findLinks = func(n *html.Node) {
 		if n.Type == html.ElementNode && n.Data == "a" {
 			// search an.Attr child nodes? already in children?
-
-			// Get and filter urls from visited
-			c.mu.Lock()
-			urls := slices.DeleteFunc(findUrls(n.Attr, c.BaseUrl), func(s string) bool {
-				_, visited := c.visited[url]
-				return !visited
-			})
-			c.mu.Unlock()
+			urls := findUrls(n.Attr, c.BaseUrl)
 
 			c.workTracker.Add(len(urls)) // CRITICAL: increment work tracker first otherwise data race
 
@@ -138,7 +145,7 @@ func (c *Crawler) crawl(url string) {
 	findLinks(node)
 }
 
-func (c *Crawler) Start() {
+func (c *crawler) run() {
 	var wg sync.WaitGroup
 
 	c.visited = make(map[string]struct{})
@@ -150,7 +157,7 @@ func (c *Crawler) Start() {
 	c.urlQueue <- c.BaseUrl
 
 	workerCount := max(c.WorkerCount, 1)
-	wg.Add(workerCount)
+	wg.Add(int(workerCount))
 	for range workerCount {
 		go func() {
 			defer wg.Done()
@@ -167,13 +174,14 @@ func (c *Crawler) Start() {
 	// Wait for workers to complete
 	wg.Wait()
 }
-
-func (c *Crawler) PrintUrls() {
+func (c *crawler) urlsVisited() []string {
+	urlsVisited := make([]string, 0, len(c.visited))
 	for key := range c.visited {
-		fmt.Println(key)
+		urlsVisited = append(urlsVisited, key)
 	}
+	return urlsVisited
 }
 
-func (c *Crawler) TotalVisited() int {
-	return len(c.visited)
-}
+// func (c *Crawler) inverted() int {
+// 	return len(c.visited)
+// }

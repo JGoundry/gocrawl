@@ -1,4 +1,4 @@
-module webcrawler
+module gocrawl
 
 go 1.23.1
 
