@@ -2,6 +2,7 @@ package report
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 )
 
@@ -12,7 +13,11 @@ const (
 	innerUrl      = "|| -> "
 )
 
-func ReportVisitedUrls(urls []string) {
+func ReportVisitedUrls(urls []string, sort bool) {
+	if sort {
+		slices.Sort(urls)
+	}
+
 	var sb strings.Builder
 
 	sb.WriteString(outterDivider + "\n")

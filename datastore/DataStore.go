@@ -10,6 +10,10 @@ type InvertedIndex = map[string]map[string]uint
 
 type State = string
 
+var (
+	ErrIndexEmpty = errors.New("no index loaded")
+)
+
 const (
 	EmptyState  State = "empty"
 	LoadedState State = "loaded"
@@ -38,14 +42,14 @@ func (ds *DataStore) State() State {
 
 func (ds *DataStore) Index() (InvertedIndex, error) {
 	if ds.state == EmptyState {
-		return nil, errors.New("no index loaded")
+		return nil, ErrIndexEmpty
 	}
 	return ds.index, nil
 }
 
 func (ds *DataStore) UrlsVisited() ([]string, error) {
 	if ds.state == EmptyState {
-		return nil, errors.New("no index loaded")
+		return nil, ErrIndexEmpty
 	}
 	return ds.urlsVisited, nil
 }

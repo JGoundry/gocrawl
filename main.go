@@ -12,10 +12,12 @@ package main
 */
 
 import (
+	"bufio"
 	"fmt"
 	"gocrawl/crawl"
 	"gocrawl/datastore"
 	"gocrawl/report"
+	"os"
 	"strings"
 	"time"
 )
@@ -60,10 +62,10 @@ func help() string {
 }
 
 func getInput() string {
+	reader := bufio.NewReader(os.Stdin)
 	fmt.Printf("$ ")
-	var input string
-	fmt.Scanln(&input)
-	return input
+	input, _ := reader.ReadString('\n')
+	return strings.TrimSpace(input)
 }
 
 func main() {
@@ -109,7 +111,7 @@ func main() {
 				fmt.Println(err.Error())
 				continue
 			}
-			report.ReportVisitedUrls(urls)
+			report.ReportVisitedUrls(urls, true)
 
 		default:
 			fmt.Printf("Invalid command: %q\n", input)
