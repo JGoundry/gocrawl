@@ -20,8 +20,7 @@ func Crawl(baseUrl string, workerCount uint) (InvertedIndex, []string) {
 	}
 	c.run()
 
-	// todo: index
-	return InvertedIndex{}, c.urlsVisited()
+	return c.index, c.urlsVisited()
 
 }
 
@@ -31,6 +30,7 @@ type crawler struct {
 
 	mu          sync.Mutex          // Mutex for visited set, url overflow queue
 	visited     map[string]struct{} // Visited URL set
+	index       InvertedIndex       //
 	urlQueue    chan string         //
 	urlOverflow []string            // URL queue to prevent blocking when chan full
 	workTracker sync.WaitGroup      // Blocks on main thread until all work is done
@@ -98,6 +98,16 @@ func (c *crawler) crawl(url string) {
 					c.mu.Unlock()
 				}
 			}
+		} else if n.Type == html.TextNode {
+			words := strings.Fields(n.Data)
+			c.mu.Lock()
+			for _, word := range words {
+				if _, ok := c.index[word]; !ok {
+					c.index[word] = make(map[string]uint)
+				}
+				c.index[word][url]++
+			}
+			c.mu.Unlock()
 		}
 		for c := n.FirstChild; c != nil; c = c.NextSibling {
 			findLinks(c)
@@ -113,6 +123,7 @@ func (c *crawler) run() {
 	c.visited = make(map[string]struct{})
 	c.urlQueue = make(chan string, 1000)
 	c.urlOverflow = make([]string, 0, 1000)
+	c.index = make(InvertedIndex)
 
 	// Increment work tracker and send base url to chan
 	c.workTracker.Add(1)

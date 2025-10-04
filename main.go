@@ -1,16 +1,5 @@
 package main
 
-/*
-
-    TODO List
-
-	[ ] Create inverted index on crawler
-	[ ] DataStore.SaveIndex() JSON to disk
-	[ ] DataStore.LoadIndex() JSON from disk
-	[ ] ReportIndex()
-
-*/
-
 import (
 	"bufio"
 	"fmt"
@@ -92,10 +81,16 @@ func main() {
 			ds.Load(index, urlsVisited)
 
 		case LoadCommand:
-			fmt.Println("<TODO>")
+			err := ds.LoadJSON()
+			if err != nil {
+				fmt.Println(err.Error())
+			}
 
 		case SaveCommand:
-			fmt.Println("<TODO>")
+			err := ds.SaveJSON()
+			if err != nil {
+				fmt.Println(err.Error())
+			}
 
 		case IndexCommand:
 			index, err := ds.Index()
