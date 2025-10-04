@@ -62,44 +62,6 @@ func (c *crawler) crawlWorker() {
 	}
 }
 
-func getHtml(url string) (*html.Node, error) {
-	resp, err := http.Get(url) // send GET
-	if err != nil {
-		return nil, err
-	}
-
-	// Check status is ok
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("Non-OK HTTP Status: %v", resp.Status)
-	}
-
-	// Ensure content is html
-	if !strings.Contains(resp.Header.Get("Content-Type"), "text/html") {
-		return nil, fmt.Errorf("Content-Type is not html")
-	}
-
-	node, err := html.Parse(resp.Body) // parse HTML
-	resp.Body.Close()                  // close http reader
-	if err != nil {
-		return nil, err
-	}
-	return node, nil
-}
-
-func findUrls(attr []html.Attribute, baseUrl string) []string {
-	var urls []string
-	for _, a := range attr {
-		if a.Key == "href" {
-			if len(a.Val) == 0 || a.Val[0] != '/' { // skip other websites for now
-				continue
-			}
-
-			urls = append(urls, fmt.Sprintf("%s%s", baseUrl, a.Val))
-		}
-	}
-	return urls
-}
-
 func (c *crawler) crawl(url string) {
 	defer c.workTracker.Done()
 
@@ -174,6 +136,7 @@ func (c *crawler) run() {
 	// Wait for workers to complete
 	wg.Wait()
 }
+
 func (c *crawler) urlsVisited() []string {
 	urlsVisited := make([]string, 0, len(c.visited))
 	for key := range c.visited {
@@ -182,6 +145,40 @@ func (c *crawler) urlsVisited() []string {
 	return urlsVisited
 }
 
-// func (c *Crawler) inverted() int {
-// 	return len(c.visited)
-// }
+func getHtml(url string) (*html.Node, error) {
+	resp, err := http.Get(url) // send GET
+	if err != nil {
+		return nil, err
+	}
+
+	// Check status is ok
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("Non-OK HTTP Status: %v", resp.Status)
+	}
+
+	// Ensure content is html
+	if !strings.Contains(resp.Header.Get("Content-Type"), "text/html") {
+		return nil, fmt.Errorf("Content-Type is not html")
+	}
+
+	node, err := html.Parse(resp.Body) // parse HTML
+	resp.Body.Close()                  // close http reader
+	if err != nil {
+		return nil, err
+	}
+	return node, nil
+}
+
+func findUrls(attr []html.Attribute, baseUrl string) []string {
+	var urls []string
+	for _, a := range attr {
+		if a.Key == "href" {
+			if len(a.Val) == 0 || a.Val[0] != '/' { // skip other websites for now
+				continue
+			}
+
+			urls = append(urls, fmt.Sprintf("%s%s", baseUrl, a.Val))
+		}
+	}
+	return urls
+}

@@ -55,7 +55,7 @@ func help() string {
 	sb.WriteString("    " + IndexCommand + "\n")
 	sb.WriteString("    " + ExitCommand + "\n")
 	sb.WriteString("\n")
-	sb.WriteString("Load data, or run crawler to display index information\n")
+	sb.WriteString("Load data, or run crawler to populate datastore\n")
 	return sb.String()
 }
 
@@ -71,7 +71,6 @@ func main() {
 
 	baseUrl := "https://quotes.toscrape.com"
 
-	// Print
 	fmt.Println(header())
 	fmt.Println(helpPrompt())
 
@@ -81,7 +80,8 @@ func main() {
 			fmt.Println(help())
 
 		case StatusCommand:
-			fmt.Println(ds.State())
+			fmt.Println("baseUrl:   ", baseUrl)
+			fmt.Println("datastore: ", ds.State())
 
 		case RunCommand:
 			start := time.Now()
@@ -110,9 +110,6 @@ func main() {
 				continue
 			}
 			report.ReportVisitedUrls(urls)
-
-		case ExitCommand:
-			return
 
 		default:
 			fmt.Printf("Invalid command: %q\n", input)
